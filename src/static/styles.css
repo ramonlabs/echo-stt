@@ -1,0 +1,38 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 16px;
+}
+
+#controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+#status {
+  font-size: 14px;
+  color: #666;
+}
+
+#status.recording {
+  color: #c00;
+  font-weight: bold;
+}
+
+#status.speaking {
+  color: #080;
+  font-weight: bold;
+}
+
+#transcript {
+  display: block;
+  width: 100%;
+  max-width: 48rem;
+  height: 200px;
+  font-size: 15px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  resize: vertical;
+}
