@@ -1,0 +1,8 @@
+server:
+  host: "0.0.0.0"
+  port: 8002
+
+whisper:
+  model: "large"
+  device: "auto"
+  compute_type: "auto"
