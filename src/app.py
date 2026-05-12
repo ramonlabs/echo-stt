@@ -46,11 +46,6 @@ DEFAULT_VAD_THRESHOLD = 0.02
 app = FastAPI(title="STT Service")
 logger = STTLogger()
 
-public_dir = os.path.join(os.path.dirname(__file__), "public")
-if os.path.isdir(public_dir):
-    app.mount("/", StaticFiles(directory=public_dir, html=True), name="ui")
-
-
 class TranscribeResp(BaseModel):
     text: str
     language: str | None = None
@@ -457,6 +452,11 @@ async def broadcast_vad_event(event, data=None):
             await ws.send_json(msg)
         except Exception:
             pass
+
+
+public_dir = os.path.join(os.path.dirname(__file__), "public")
+if os.path.isdir(public_dir):
+    app.mount("/", StaticFiles(directory=public_dir, html=True), name="ui")
 
 
 if __name__ == "__main__":
