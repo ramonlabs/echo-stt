@@ -417,16 +417,22 @@ async def websocket_stt(ws: WebSocket):
                                 }
                             )
 
+                        except (WebSocketDisconnect, RuntimeError):
+                            break
+
                         except Exception as e:
                             logger.exception(f"streaming transcription failed: {e}")
-                            await ws.send_json(
-                                {
-                                    "type": "transcription",
-                                    "text": "",
-                                    "final": True,
-                                    "error": str(e),
-                                }
-                            )
+                            try:
+                                await ws.send_json(
+                                    {
+                                        "type": "transcription",
+                                        "text": "",
+                                        "final": True,
+                                        "error": str(e),
+                                    }
+                                )
+                            except Exception:
+                                break
 
                         sess.clear()
 
@@ -437,7 +443,7 @@ async def websocket_stt(ws: WebSocket):
                     elif typ == "ping":
                         await ws.send_json({"type": "pong"})
 
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError):
         logger.info(f"streaming STT session disconnected: {sid}")
 
     except Exception as e:
