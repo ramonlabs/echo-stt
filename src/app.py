@@ -20,7 +20,6 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 import stt
@@ -47,14 +46,9 @@ DEFAULT_VAD_THRESHOLD = 0.02
 app = FastAPI(title="STT Service")
 logger = STTLogger()
 
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.isdir(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-
-@app.get("/")
-async def index():
-    return RedirectResponse("/static/index.html")
+public_dir = os.path.join(os.path.dirname(__file__), "public")
+if os.path.isdir(public_dir):
+    app.mount("/", StaticFiles(directory=public_dir, html=True), name="ui")
 
 
 class TranscribeResp(BaseModel):
