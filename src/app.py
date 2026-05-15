@@ -46,6 +46,7 @@ DEFAULT_VAD_THRESHOLD = 0.02
 app = FastAPI(title="STT Service")
 logger = STTLogger()
 
+
 class TranscribeResp(BaseModel):
     text: str
     language: str | None = None
