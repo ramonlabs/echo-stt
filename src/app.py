@@ -50,12 +50,8 @@ logger = STTLogger()
 class TranscribeResp(BaseModel):
     text: str
     language: str | None = None
-
-
-class TranscribeFullResp(BaseModel):
-    text: str
-    language: str | None = None
-    segments: list = []
+    segments: list | None = None
+    words: list | None = None
 
 
 class HealthResp(BaseModel):
@@ -99,43 +95,19 @@ async def health():
     )
 
 
-@app.post("/transcribe", response_model=TranscribeResp)
-async def transcribe(file: UploadFile = File(...), language: str | None = Form(None)):
-    """Transcribe audio file to text."""
-    if stt.engine is None:
-        raise HTTPException(
-            status_code=HTTP_ERR_UNAVAILABLE, detail="STT engine not initialized"
-        )
-
-    suffix = get_suffix(file.filename)
-    tmp = None
-
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-            content = await file.read()
-            f.write(content)
-            tmp = f.name
-
-        result = stt.engine.transcribe(tmp, lang=language)
-        return TranscribeResp(text=result["text"], language=result.get("language"))
-
-    except Exception as e:
-        logger.exception(f"transcription failed: {e}")
-        raise HTTPException(status_code=HTTP_ERR_INTERNAL, detail=str(e)) from e
-
-    finally:
-        if tmp:
-            try:
-                os.remove(tmp)
-            except Exception:
-                pass
-
-
-@app.post("/transcribe/full", response_model=TranscribeFullResp)
-async def transcribe_full(
-    file: UploadFile = File(...), language: str | None = Form(None)
+@app.post(
+    "/transcribe",
+    response_model=TranscribeResp,
+    response_model_exclude_none=True,
+)
+async def transcribe(
+    file: UploadFile = File(...),
+    language: str | None = Form(None),
+    segments: bool = Form(False),
+    words: bool = Form(False),
+    translate: bool = Form(False),
 ):
-    """Transcribe audio with segment details."""
+    """Transcribe audio, optionally with segments, word timestamps, or translation."""
     if stt.engine is None:
         raise HTTPException(
             status_code=HTTP_ERR_UNAVAILABLE, detail="STT engine not initialized"
@@ -150,58 +122,42 @@ async def transcribe_full(
             f.write(content)
             tmp = f.name
 
-        result = stt.engine.transcribe(tmp, lang=language)
+        task = "translate" if translate else "transcribe"
+        result = stt.engine.transcribe(
+            tmp, lang=language, task=task, word_timestamps=words
+        )
 
-        segs = []
-        for s in result.get("segments", []):
-            segs.append(
+        resp = TranscribeResp(text=result["text"], language=result.get("language"))
+
+        if segments:
+            resp.segments = [
                 {
                     "start": s.get("start"),
                     "end": s.get("end"),
                     "text": s.get("text", "").strip(),
                 }
-            )
+                for s in result.get("segments", [])
+            ]
 
-        return TranscribeFullResp(
-            text=result["text"],
-            language=result.get("language"),
-            segments=segs,
-        )
+        if words:
+            # flatten segment words into one searchable list
+            flat = []
+            for s in result.get("segments", []):
+                for w in s.get("words", []):
+                    flat.append(
+                        {
+                            "word": w.get("word", "").strip(),
+                            "start": w.get("start"),
+                            "end": w.get("end"),
+                            "probability": w.get("probability"),
+                        }
+                    )
+            resp.words = flat
+
+        return resp
 
     except Exception as e:
         logger.exception(f"transcription failed: {e}")
-        raise HTTPException(status_code=HTTP_ERR_INTERNAL, detail=str(e)) from e
-
-    finally:
-        if tmp:
-            try:
-                os.remove(tmp)
-            except Exception:
-                pass
-
-
-@app.post("/transcribe/translate", response_model=TranscribeResp)
-async def transcribe_translate(file: UploadFile = File(...)):
-    """Transcribe and translate audio to English."""
-    if stt.engine is None:
-        raise HTTPException(
-            status_code=HTTP_ERR_UNAVAILABLE, detail="STT engine not initialized"
-        )
-
-    suffix = get_suffix(file.filename)
-    tmp = None
-
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-            content = await file.read()
-            f.write(content)
-            tmp = f.name
-
-        result = stt.engine.transcribe(tmp, task="translate")
-        return TranscribeResp(text=result["text"], language="en")
-
-    except Exception as e:
-        logger.exception(f"translation failed: {e}")
         raise HTTPException(status_code=HTTP_ERR_INTERNAL, detail=str(e)) from e
 
     finally:
