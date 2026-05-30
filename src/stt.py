@@ -1,3 +1,4 @@
+# todo: whisperx here for multi-speaker when friends talk to it
 import os
 import tempfile
 
@@ -60,7 +61,13 @@ class FasterWhisperSTT:
             raise
 
     def transcribe(
-        self, path, lang=None, task="transcribe", beam_size=5, vad_filter=True
+        self,
+        path,
+        lang=None,
+        task="transcribe",
+        beam_size=5,
+        vad_filter=True,
+        word_timestamps=False,
     ):
         """Transcribe audio file."""
         self.load_model()
@@ -78,13 +85,28 @@ class FasterWhisperSTT:
                 condition_on_previous_text=False,
                 no_speech_threshold=0.6,
                 compression_ratio_threshold=2.4,
+                word_timestamps=word_timestamps,
             )
 
             seg_list = []
             parts = []
 
             for s in segs:
-                seg_list.append({"start": s.start, "end": s.end, "text": s.text})
+                seg = {"start": s.start, "end": s.end, "text": s.text}
+
+                # todo: tag words with speaker when friends join the stream
+                if word_timestamps and s.words:
+                    seg["words"] = [
+                        {
+                            "word": w.word,
+                            "start": w.start,
+                            "end": w.end,
+                            "probability": w.probability,
+                        }
+                        for w in s.words
+                    ]
+
+                seg_list.append(seg)
                 parts.append(s.text)
 
             text = "".join(parts).strip()
