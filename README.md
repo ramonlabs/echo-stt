@@ -35,7 +35,7 @@ import requests
 
 with open("audio.wav", "rb") as f:
     response = requests.post(
-        "http://localhost:8002/transcribe",
+        "http://localhost:47102/transcribe",
         files={"file": f}
     )
     print(response.json()["text"])
