@@ -40,3 +40,14 @@ with open("audio.wav", "rb") as f:
     )
     print(response.json()["text"])
 ```
+
+## Endpoints
+
+| Method    | Path           | Description                                                               |
+| --------- | -------------- | ------------------------------------------------------------------------- |
+| GET       | `/health`      | Check service health and loaded model                                     |
+| POST      | `/transcribe`  | Transcribe audio, with optional segments, word timestamps, or translation |
+| POST      | `/vad/analyze` | Analyze uploaded audio for voice activity                                 |
+| GET       | `/vad/status`  | Check VAD availability                                                    |
+| WebSocket | `/ws/vad`      | Real-time voice activity detection                                        |
+| WebSocket | `/ws/stt`      | Streaming speech-to-text                                                  |
