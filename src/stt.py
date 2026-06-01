@@ -5,9 +5,7 @@ import tempfile
 import numpy as np
 from faster_whisper import WhisperModel
 
-from log import STTLogger
-
-logger = STTLogger()
+from log import logger
 
 DEFAULT_MODEL = "base"
 DEFAULT_DEVICE = "auto"

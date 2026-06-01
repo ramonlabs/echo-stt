@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 import stt
 import vad
-from log import STTLogger
+from log import configure, logger
 
 # HTTP status codes
 HTTP_ERR_INTERNAL = 500
@@ -44,7 +44,6 @@ CHUNK_ACK_INTERVAL = 32000
 DEFAULT_VAD_THRESHOLD = 0.02
 
 app = FastAPI(title="STT Service")
-logger = STTLogger()
 
 
 class TranscribeResp(BaseModel):
@@ -431,7 +430,7 @@ if __name__ == "__main__":
     ap.add_argument("--debug", action="store_true")
     a = ap.parse_args()
 
-    logger = STTLogger(debug=a.debug)
+    configure(debug=a.debug)
     logger.info(f"debug={a.debug}")
 
     cfg = {}
