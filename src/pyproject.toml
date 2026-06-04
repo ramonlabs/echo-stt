@@ -22,7 +22,7 @@ dependencies = [
 package = false
 
 [tool.uv.sources]
-echo-common = { git = "ssh://git@github.com/ramonics/echo.git", subdirectory = "services/common" }
+echo-common = { git = "ssh://git@github.com/ramonlabs/echo.git", subdirectory = "services/common" }
 
 [tool.ruff]
 line-length = 88
