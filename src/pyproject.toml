@@ -15,10 +15,14 @@ dependencies = [
     "aiofiles>=23.0.0",
     "websockets>=12.0",
     "pydantic>=2.9.0",
+    "echo-common",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+echo-common = { git = "ssh://git@github.com/ramonics/echo.git", subdirectory = "services/common" }
 
 [tool.ruff]
 line-length = 88

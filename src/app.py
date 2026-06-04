@@ -22,6 +22,8 @@ from fastapi import (
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from echo_common import resolve_path, service_root
+
 import stt
 import vad
 from log import configure, logger
@@ -30,9 +32,7 @@ from log import configure, logger
 HTTP_ERR_INTERNAL = 500
 HTTP_ERR_UNAVAILABLE = 503
 
-# Server defaults
-DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 47102
+SERVICE_ROOT = service_root(__file__)
 
 # Audio constants
 DEFAULT_SAMPLE_RATE = 16000
@@ -410,7 +410,7 @@ async def broadcast_vad_event(event, data=None):
             pass
 
 
-public_dir = os.path.join(os.path.dirname(__file__), "public")
+public_dir = resolve_path("src/public", SERVICE_ROOT)
 if os.path.isdir(public_dir):
     app.mount("/", StaticFiles(directory=public_dir, html=True), name="ui")
 
@@ -420,7 +420,7 @@ if __name__ == "__main__":
     ap.add_argument(
         "--cfg",
         default=os.getenv(
-            "CFG", os.path.join(os.path.dirname(__file__), "private", "config.yaml")
+            "CFG", resolve_path("src/private/config.yaml", SERVICE_ROOT)
         ),
     )
     ap.add_argument("--host", default=None)
@@ -428,31 +428,30 @@ if __name__ == "__main__":
     ap.add_argument("--model", default=None)
     ap.add_argument("--device", default=None)
     ap.add_argument("--debug", action="store_true")
-    a = ap.parse_args()
+    args = ap.parse_args()
 
-    configure(debug=a.debug)
-    logger.info(f"debug={a.debug}")
+    configure(debug=args.debug)
+    logger.info(f"debug={args.debug}")
 
     cfg = {}
-    if os.path.exists(a.cfg):
-        logger.info(f"config: {a.cfg}")
+    if os.path.exists(args.cfg):
+        logger.info(f"config: {args.cfg}")
         try:
-            cfg = load_cfg(a.cfg)
+            cfg = load_cfg(args.cfg)
         except Exception as e:
             logger.warning(f"failed to load config: {e}")
 
     whisper_cfg = cfg.get("whisper", {})
-    model = a.model or whisper_cfg.get("model", "base")
-    device = a.device or whisper_cfg.get("device", "auto")
+    model = args.model or whisper_cfg.get("model", "base")
+    device = args.device or whisper_cfg.get("device", "auto")
     compute = whisper_cfg.get("compute_type", "auto")
 
-    server_cfg = cfg.get("server", {})
-    host = a.host or server_cfg.get("host", DEFAULT_HOST)
-    port = a.port or server_cfg.get("port", DEFAULT_PORT)
+    host = args.host or cfg.get("server", {}).get("host", "0.0.0.0")
+    port = args.port or cfg.get("server", {}).get("port", 47102)
 
     logger.info(
         f"initializing faster-whisper model: {model} (device={device}, compute={compute})"
     )
     stt.init(model=model, device=device, compute=compute)
 
-    uvicorn.run(app, host=host, port=port, log_level="debug" if a.debug else "info")
+    uvicorn.run(app, host=host, port=port, log_level="debug" if args.debug else "info")
