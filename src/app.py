@@ -284,6 +284,91 @@ class StreamingSession:
 streaming_sessions = {}
 
 
+async def _handle_audio_chunk(ws, sess, chunk):
+    total = sess.add_chunk(chunk)
+
+    if total % CHUNK_ACK_INTERVAL == 0:
+        await ws.send_json({"type": "chunk_ack", "bytes_received": total})
+
+
+async def _finish_session(ws, sess, data):
+    """Transcribe buffered audio. Returns False to end the session."""
+    sess.is_speaking = False
+    audio = sess.get_audio()
+
+    try:
+        if len(audio) < MIN_AUDIO_BYTES:
+            await ws.send_json(
+                {
+                    "type": "transcription",
+                    "text": "",
+                    "final": True,
+                    "error": "audio_too_short",
+                }
+            )
+            return True
+
+        await ws.send_json({"type": "transcribing"})
+
+        if stt.engine is None:
+            raise RuntimeError("STT engine not initialized")
+
+        suffix = data.get("format", ".webm")
+        if not suffix.startswith("."):
+            suffix = f".{suffix}"
+
+        result = stt.engine.transcribe_bytes(audio, suffix=suffix)
+
+        await ws.send_json(
+            {
+                "type": "transcription",
+                "text": result["text"],
+                "language": result.get("language"),
+                "final": True,
+            }
+        )
+        return True
+
+    except (WebSocketDisconnect, RuntimeError):
+        return False
+
+    except Exception as e:
+        logger.exception(f"streaming transcription failed: {e}")
+        try:
+            await ws.send_json(
+                {"type": "transcription", "text": "", "final": True, "error": str(e)}
+            )
+        except Exception:
+            return False
+        return True
+
+    finally:
+        sess.clear()
+
+
+async def _handle_text_message(ws, sess, data):
+    """Dispatch a JSON control message. Returns False to end the session."""
+    typ = data.get("type", "")
+
+    if typ == "start":
+        sess.clear()
+        sess.is_speaking = True
+        sess.speech_start = time.time()
+        await ws.send_json({"type": "started"})
+
+    elif typ == "end":
+        return await _finish_session(ws, sess, data)
+
+    elif typ == "cancel":
+        sess.clear()
+        await ws.send_json({"type": "cancelled"})
+
+    elif typ == "ping":
+        await ws.send_json({"type": "pong"})
+
+    return True
+
+
 @app.websocket("/ws/stt")
 async def websocket_stt(ws: WebSocket):
     """WebSocket for streaming STT."""
@@ -301,91 +386,20 @@ async def websocket_stt(ws: WebSocket):
             if msg["type"] == "websocket.disconnect":
                 break
 
-            if msg["type"] == "websocket.receive":
-                if "bytes" in msg:
-                    total = sess.add_chunk(msg["bytes"])
+            if msg["type"] != "websocket.receive":
+                continue
 
-                    if total % CHUNK_ACK_INTERVAL == 0:
-                        await ws.send_json(
-                            {"type": "chunk_ack", "bytes_received": total}
-                        )
+            if "bytes" in msg:
+                await _handle_audio_chunk(ws, sess, msg["bytes"])
 
-                elif "text" in msg:
-                    try:
-                        data = json.loads(msg["text"])
-                    except Exception:
-                        continue
+            elif "text" in msg:
+                try:
+                    data = json.loads(msg["text"])
+                except Exception:
+                    continue
 
-                    typ = data.get("type", "")
-
-                    if typ == "start":
-                        sess.clear()
-                        sess.is_speaking = True
-                        sess.speech_start = time.time()
-                        await ws.send_json({"type": "started"})
-
-                    elif typ == "end":
-                        sess.is_speaking = False
-                        audio = sess.get_audio()
-
-                        if len(audio) < MIN_AUDIO_BYTES:
-                            await ws.send_json(
-                                {
-                                    "type": "transcription",
-                                    "text": "",
-                                    "final": True,
-                                    "error": "audio_too_short",
-                                }
-                            )
-                            sess.clear()
-                            continue
-
-                        await ws.send_json({"type": "transcribing"})
-
-                        try:
-                            if stt.engine is None:
-                                raise RuntimeError("STT engine not initialized")
-
-                            suffix = data.get("format", ".webm")
-                            if not suffix.startswith("."):
-                                suffix = f".{suffix}"
-
-                            result = stt.engine.transcribe_bytes(audio, suffix=suffix)
-
-                            await ws.send_json(
-                                {
-                                    "type": "transcription",
-                                    "text": result["text"],
-                                    "language": result.get("language"),
-                                    "final": True,
-                                }
-                            )
-
-                        except (WebSocketDisconnect, RuntimeError):
-                            break
-
-                        except Exception as e:
-                            logger.exception(f"streaming transcription failed: {e}")
-                            try:
-                                await ws.send_json(
-                                    {
-                                        "type": "transcription",
-                                        "text": "",
-                                        "final": True,
-                                        "error": str(e),
-                                    }
-                                )
-                            except Exception:
-                                break
-
-                        sess.clear()
-
-                    elif typ == "cancel":
-                        sess.clear()
-                        await ws.send_json({"type": "cancelled"})
-
-                    elif typ == "ping":
-                        await ws.send_json({"type": "pong"})
+                if not await _handle_text_message(ws, sess, data):
+                    break
 
     except (WebSocketDisconnect, RuntimeError):
         logger.info(f"streaming STT session disconnected: {sid}")
