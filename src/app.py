@@ -1,28 +1,27 @@
+import argparse
+import json
 import os
 import sys
-import json
+import tempfile
 import time
 import wave
-import argparse
-import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import uvicorn
 import yaml
+from echo_common import resolve_path, service_root
 from fastapi import (
     FastAPI,
-    HTTPException,
-    UploadFile,
     File,
     Form,
+    HTTPException,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-
-from echo_common import resolve_path, service_root
 
 import stt
 import vad
@@ -419,9 +418,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--cfg",
-        default=os.getenv(
-            "CFG", resolve_path("src/private/config.yaml", SERVICE_ROOT)
-        ),
+        default=os.getenv("CFG", resolve_path("src/private/config.yaml", SERVICE_ROOT)),
     )
     ap.add_argument("--host", default=None)
     ap.add_argument("--port", type=int, default=None)
@@ -450,7 +447,8 @@ if __name__ == "__main__":
     port = args.port or cfg.get("server", {}).get("port", 47102)
 
     logger.info(
-        f"initializing faster-whisper model: {model} (device={device}, compute={compute})"
+        f"initializing faster-whisper model: {model}"
+        f" (device={device}, compute={compute})"
     )
     stt.init(model=model, device=device, compute=compute)
 
