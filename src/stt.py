@@ -5,7 +5,7 @@ import tempfile
 import numpy as np
 from faster_whisper import WhisperModel
 
-from log import logger
+from echo_common import logger
 
 DEFAULT_MODEL = "base"
 DEFAULT_DEVICE = "auto"
