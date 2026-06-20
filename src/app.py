@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import uvicorn
 import yaml
-from echo_common import resolve_path, service_root
+from echo_common import resolve_path, service_root, service_version
 from fastapi import (
     FastAPI,
     File,
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 import stt
 import vad
-from log import configure, logger
+from echo_common import configure_logging, logger
 
 # HTTP status codes
 HTTP_ERR_INTERNAL = 500
@@ -441,7 +441,7 @@ if __name__ == "__main__":
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args()
 
-    configure(debug=args.debug)
+    configure_logging(debug=args.debug)
     logger.info(f"debug={args.debug}")
 
     cfg = {}
@@ -464,6 +464,7 @@ if __name__ == "__main__":
         f"initializing faster-whisper model: {model}"
         f" (device={device}, compute={compute})"
     )
+    logger.info(f"service version: {service_version(__file__)}")
     stt.init(model=model, device=device, compute=compute)
 
     uvicorn.run(app, host=host, port=port, log_level="debug" if args.debug else "info")
