@@ -1,6 +1,6 @@
 [project]
 name = "stt"
-version = "0.1.0"
+version = "0.1"
 description = "STT service - Speech recognition using Whisper"
 requires-python = ">=3.11"
 dependencies = [
