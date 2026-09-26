@@ -10,7 +10,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import uvicorn
 import yaml
-from echo_common import resolve_path, service_root, service_version
+from echo_common import (
+    HTTP_ERR_INTERNAL,
+    HTTP_ERR_UNAVAILABLE,
+    configure_logging,
+    logger,
+    resolve_path,
+    service_root,
+    service_version,
+)
 from fastapi import (
     FastAPI,
     File,
@@ -25,11 +33,8 @@ from pydantic import BaseModel
 
 import stt
 import vad
-from echo_common import configure_logging, logger
 
 # HTTP status codes
-HTTP_ERR_INTERNAL = 500
-HTTP_ERR_UNAVAILABLE = 503
 
 SERVICE_ROOT = service_root(__file__)
 
