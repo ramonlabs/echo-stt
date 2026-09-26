@@ -8,6 +8,8 @@ import wave
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import contextlib
+
 import uvicorn
 import yaml
 from echo_common import (
@@ -75,7 +77,7 @@ class VADStatusResp(BaseModel):
 
 
 def load_cfg(p):
-    with open(p, "r", encoding="utf-8") as f:
+    with open(p, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -143,18 +145,16 @@ async def transcribe(
 
         if words:
             # flatten segment words into one searchable list
-            flat = []
-            for s in result.get("segments", []):
-                for w in s.get("words", []):
-                    flat.append(
-                        {
-                            "word": w.get("word", "").strip(),
-                            "start": w.get("start"),
-                            "end": w.get("end"),
-                            "probability": w.get("probability"),
-                        }
-                    )
-            resp.words = flat
+            resp.words = [
+                {
+                    "word": w.get("word", "").strip(),
+                    "start": w.get("start"),
+                    "end": w.get("end"),
+                    "probability": w.get("probability"),
+                }
+                for s in result.get("segments", [])
+                for w in s.get("words", [])
+            ]
 
         return resp
 
@@ -164,10 +164,8 @@ async def transcribe(
 
     finally:
         if tmp:
-            try:
+            with contextlib.suppress(Exception):
                 os.remove(tmp)
-            except Exception:
-                pass
 
 
 @app.post("/vad/analyze", response_model=VADAnalyzeResp)
@@ -203,10 +201,8 @@ async def vad_analyze(
 
     finally:
         if tmp:
-            try:
+            with contextlib.suppress(Exception):
                 os.remove(tmp)
-            except Exception:
-                pass
 
 
 @app.get("/vad/status", response_model=VADStatusResp)
@@ -411,8 +407,7 @@ async def websocket_stt(ws: WebSocket):
         logger.exception(f"streaming STT error: {e}")
 
     finally:
-        if sid in streaming_sessions:
-            del streaming_sessions[sid]
+        streaming_sessions.pop(sid, None)
 
 
 async def broadcast_vad_event(event, data=None):
@@ -420,10 +415,8 @@ async def broadcast_vad_event(event, data=None):
     msg = {"event": event, **(data or {})}
 
     for ws in active_vad_conns:
-        try:
+        with contextlib.suppress(Exception):
             await ws.send_json(msg)
-        except Exception:
-            pass
 
 
 public_dir = resolve_path("src/public", SERVICE_ROOT)

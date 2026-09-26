@@ -26,7 +26,21 @@ echo-common = { git = "https://github.com/ramonlabs/echo.git", subdirectory = "s
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "ARG", "RUF", "PIE", "TRY", "PERF", "PLR2004"]
+ignore = ["RUF001", "RUF010", "TRY003", "TRY300", "TRY301"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ARG", "RUF012", "PLR2004"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Query",
+]
 
 [tool.ruff.format]
 quote-style = "double"

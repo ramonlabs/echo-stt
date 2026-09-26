@@ -87,15 +87,14 @@ class VoiceActivityDetector:
 
         if not self.triggered:
             self.ring_buffer.append((frame, is_speech))
-            num_voiced = len([f for f, speech in self.ring_buffer if speech])
+            num_voiced = sum(1 for _, speech in self.ring_buffer if speech)
 
             if num_voiced > TRIGGER_THRESHOLD * self.ring_buffer.maxlen:
                 self.triggered = True
                 self.state = VADState.SPEECH
                 self.last_state_change = time.time()
 
-                for f, _ in self.ring_buffer:
-                    self.voiced_frames.append(f)
+                self.voiced_frames.extend(f for f, _ in self.ring_buffer)
                 self.ring_buffer.clear()
 
                 if self.on_speech_start:
@@ -103,7 +102,7 @@ class VoiceActivityDetector:
         else:
             self.voiced_frames.append(frame)
             self.ring_buffer.append((frame, is_speech))
-            num_unvoiced = len([f for f, speech in self.ring_buffer if not speech])
+            num_unvoiced = sum(1 for _, speech in self.ring_buffer if not speech)
 
             if num_unvoiced > TRIGGER_THRESHOLD * self.ring_buffer.maxlen:
                 self.triggered = False
@@ -142,12 +141,10 @@ class VoiceActivityDetector:
     def _split_frames(self, audio):
         """Split audio into frames."""
         frame_bytes = self.frame_size * BYTES_PER_SAMPLE
-        frames = []
-
-        for i in range(0, len(audio) - frame_bytes + 1, frame_bytes):
-            frames.append(audio[i : i + frame_bytes])
-
-        return frames
+        return [
+            audio[i : i + frame_bytes]
+            for i in range(0, len(audio) - frame_bytes + 1, frame_bytes)
+        ]
 
     def is_speaking(self):
         """Check if speaking."""

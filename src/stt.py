@@ -1,10 +1,10 @@
 # TODO: whisperx here for multi-speaker when friends talk to it
+import contextlib
 import os
 import tempfile
 
-from faster_whisper import WhisperModel
-
 from echo_common import logger
+from faster_whisper import WhisperModel
 
 DEFAULT_MODEL = "base"
 DEFAULT_DEVICE = "auto"
@@ -78,7 +78,7 @@ class FasterWhisperSTT:
                 task=task,
                 beam_size=beam_size,
                 vad_filter=vad_filter,
-                vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
+                vad_parameters={"min_silence_duration_ms": 500, "speech_pad_ms": 200},
                 condition_on_previous_text=False,
                 no_speech_threshold=0.6,
                 compression_ratio_threshold=2.4,
@@ -135,10 +135,8 @@ class FasterWhisperSTT:
 
         finally:
             if tmp:
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(tmp)
-                except Exception:
-                    pass
 
 
 engine = None

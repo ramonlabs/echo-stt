@@ -4,6 +4,12 @@ const transcript = document.getElementById('transcript')
 
 const FRAME_SAMPLES = 480 // 30ms at 16kHz
 const MIN_SPEECH_MS = 400 // ignore speech bursts shorter than this
+const SAMPLE_RATE = 16000
+const PROCESSOR_BUFFER = 512
+const PCM_MIN = -32768
+const PCM_MAX = 32767
+const PCM_SCALE = 32768
+const RECORDER_TIMESLICE_MS = 250
 
 const State = {
   IDLE: 0,
@@ -23,15 +29,16 @@ let recorder = null
 let speechTimer = null
 
 btn.addEventListener('click', () => {
-  state === State.IDLE ? startListening() : stopListening()
+  if (state === State.IDLE) startListening()
+  else stopListening()
 })
 
 async function startListening() {
   stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-  audioCtx = new AudioContext({ sampleRate: 16000 })
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE })
 
   const source = audioCtx.createMediaStreamSource(stream)
-  processor = audioCtx.createScriptProcessor(512, 1, 1)
+  processor = audioCtx.createScriptProcessor(PROCESSOR_BUFFER, 1, 1)
   let pcmBuffer = new Float32Array(0)
 
   processor.onaudioprocess = (e) => {
@@ -47,7 +54,7 @@ async function startListening() {
       pcmBuffer = pcmBuffer.slice(FRAME_SAMPLES)
       const int16 = new Int16Array(FRAME_SAMPLES)
       for (let i = 0; i < FRAME_SAMPLES; i++) {
-        int16[i] = Math.max(-32768, Math.min(32767, frame[i] * 32768))
+        int16[i] = Math.max(PCM_MIN, Math.min(PCM_MAX, frame[i] * PCM_SCALE))
       }
       vadWs.send(int16.buffer)
     }
@@ -98,7 +105,7 @@ function startSTT() {
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0 && sttWs?.readyState === WebSocket.OPEN) sttWs.send(e.data)
     }
-    recorder.start(250)
+    recorder.start(RECORDER_TIMESLICE_MS)
     setState(State.RECORDING)
   }
 
