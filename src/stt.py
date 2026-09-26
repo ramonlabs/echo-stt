@@ -1,7 +1,4 @@
 # TODO: whisperx here for multi-speaker when friends talk to it
-import contextlib
-import os
-import tempfile
 
 from echo_common import logger
 from faster_whisper import WhisperModel
@@ -122,22 +119,6 @@ class FasterWhisperSTT:
             logger.exception(f"transcription failed: {e}")
             raise
 
-    def transcribe_bytes(self, audio, suffix=".wav", lang=None, task="transcribe"):
-        """Transcribe audio from bytes."""
-        tmp = None
-
-        try:
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-                f.write(audio)
-                tmp = f.name
-
-            return self.transcribe(tmp, lang=lang, task=task)
-
-        finally:
-            if tmp:
-                with contextlib.suppress(Exception):
-                    os.remove(tmp)
-
 
 engine = None
 
@@ -148,29 +129,3 @@ def init(model=DEFAULT_MODEL, device=DEFAULT_DEVICE, compute=DEFAULT_COMPUTE):
 
     engine = FasterWhisperSTT(model=model, device=device, compute=compute)
     engine.load_model()
-
-
-def transcribe(path, lang=None):
-    """Transcribe audio file."""
-    if engine is None:
-        raise RuntimeError("STT engine not initialized")
-
-    result = engine.transcribe(path, lang=lang)
-    return result["text"]
-
-
-def transcribe_bytes(audio, suffix=".wav", lang=None):
-    """Transcribe audio bytes."""
-    if engine is None:
-        raise RuntimeError("STT engine not initialized")
-
-    result = engine.transcribe_bytes(audio, suffix=suffix, lang=lang)
-    return result["text"]
-
-
-def transcribe_full(path, lang=None):
-    """Transcribe audio with full segment details."""
-    if engine is None:
-        raise RuntimeError("STT engine not initialized")
-
-    return engine.transcribe(path, lang=lang)

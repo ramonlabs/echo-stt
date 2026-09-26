@@ -1,10 +1,7 @@
 import argparse
-import json
 import os
 import sys
 import tempfile
-import time
-import wave
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -27,27 +24,17 @@ from fastapi import (
     Form,
     HTTPException,
     UploadFile,
-    WebSocket,
-    WebSocketDisconnect,
 )
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import stt
-import vad
 
 # HTTP status codes
 
 SERVICE_ROOT = service_root(__file__)
 
 # Audio constants
-DEFAULT_SAMPLE_RATE = 16000
 DEFAULT_SUFFIX = ".wav"
-MIN_AUDIO_BYTES = 1000
-CHUNK_ACK_INTERVAL = 32000
-
-# VAD defaults
-DEFAULT_VAD_THRESHOLD = 0.02
 
 app = FastAPI(title="STT Service")
 
@@ -63,17 +50,6 @@ class HealthResp(BaseModel):
     status: str
     model: str | None = None
     device: str | None = None
-
-
-class VADAnalyzeResp(BaseModel):
-    has_speech: bool
-    segments: list = []
-    energy: float = 0.0
-
-
-class VADStatusResp(BaseModel):
-    available: bool
-    webrtcvad_installed: bool
 
 
 def load_cfg(p):
@@ -166,262 +142,6 @@ async def transcribe(
         if tmp:
             with contextlib.suppress(Exception):
                 os.remove(tmp)
-
-
-@app.post("/vad/analyze", response_model=VADAnalyzeResp)
-async def vad_analyze(
-    file: UploadFile = File(...), threshold: float = Form(DEFAULT_VAD_THRESHOLD)
-):
-    """Analyze audio for voice activity."""
-    suffix = get_suffix(file.filename)
-    tmp = None
-
-    try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-            content = await file.read()
-            f.write(content)
-            tmp = f.name
-
-        try:
-            with wave.open(tmp, "rb") as wf:
-                audio = wf.readframes(wf.getnframes())
-                rate = wf.getframerate()
-        except Exception:
-            audio = content
-            rate = DEFAULT_SAMPLE_RATE
-
-        segs = vad.detect_speech_energy(audio, threshold=threshold, sample_rate=rate)
-        energy = vad.audio_energy(audio)
-
-        return VADAnalyzeResp(has_speech=len(segs) > 0, segments=segs, energy=energy)
-
-    except Exception as e:
-        logger.exception(f"VAD analysis failed: {e}")
-        raise HTTPException(status_code=HTTP_ERR_INTERNAL, detail=str(e)) from e
-
-    finally:
-        if tmp:
-            with contextlib.suppress(Exception):
-                os.remove(tmp)
-
-
-@app.get("/vad/status", response_model=VADStatusResp)
-async def vad_status():
-    """Check VAD availability."""
-    return VADStatusResp(
-        available=vad.HAS_WEBRTCVAD,
-        webrtcvad_installed=vad.HAS_WEBRTCVAD,
-    )
-
-
-active_vad_conns = []
-
-
-@app.websocket("/ws/vad")
-async def websocket_vad(ws: WebSocket):
-    """WebSocket for real-time VAD."""
-    await ws.accept()
-    active_vad_conns.append(ws)
-
-    try:
-        detector = vad.VoiceActivityDetector()
-    except ImportError:
-        await ws.send_json({"error": "webrtcvad not installed"})
-        await ws.close()
-        return
-
-    try:
-        while True:
-            data = await ws.receive_bytes()
-
-            prev = detector.state
-            new = detector.process_frame(data)
-
-            if new != prev or new == vad.VADState.SPEECH:
-                await ws.send_json(
-                    {
-                        "state": new,
-                        "is_speaking": detector.is_speaking(),
-                        "time_in_state": detector.time_since_state_change(),
-                    }
-                )
-
-    except WebSocketDisconnect:
-        pass
-
-    finally:
-        if ws in active_vad_conns:
-            active_vad_conns.remove(ws)
-
-
-class StreamingSession:
-    """Manages streaming STT session."""
-
-    def __init__(self):
-        self.chunks = []
-        self.is_speaking = False
-        self.speech_start = 0.0
-        self.last_activity = 0.0
-        self.total_bytes = 0
-
-    def add_chunk(self, chunk):
-        self.chunks.append(chunk)
-        self.total_bytes += len(chunk)
-        self.last_activity = time.time()
-        return self.total_bytes
-
-    def get_audio(self):
-        return b"".join(self.chunks)
-
-    def clear(self):
-        self.chunks.clear()
-        self.total_bytes = 0
-        self.is_speaking = False
-        self.speech_start = 0.0
-
-
-streaming_sessions = {}
-
-
-async def _handle_audio_chunk(ws, sess, chunk):
-    total = sess.add_chunk(chunk)
-
-    if total % CHUNK_ACK_INTERVAL == 0:
-        await ws.send_json({"type": "chunk_ack", "bytes_received": total})
-
-
-async def _finish_session(ws, sess, data):
-    """Transcribe buffered audio. Returns False to end the session."""
-    sess.is_speaking = False
-    audio = sess.get_audio()
-
-    try:
-        if len(audio) < MIN_AUDIO_BYTES:
-            await ws.send_json(
-                {
-                    "type": "transcription",
-                    "text": "",
-                    "final": True,
-                    "error": "audio_too_short",
-                }
-            )
-            return True
-
-        await ws.send_json({"type": "transcribing"})
-
-        if stt.engine is None:
-            raise RuntimeError("STT engine not initialized")
-
-        suffix = data.get("format", ".webm")
-        if not suffix.startswith("."):
-            suffix = f".{suffix}"
-
-        result = stt.engine.transcribe_bytes(audio, suffix=suffix)
-
-        await ws.send_json(
-            {
-                "type": "transcription",
-                "text": result["text"],
-                "language": result.get("language"),
-                "final": True,
-            }
-        )
-        return True
-
-    except (WebSocketDisconnect, RuntimeError):
-        return False
-
-    except Exception as e:
-        logger.exception(f"streaming transcription failed: {e}")
-        try:
-            await ws.send_json(
-                {"type": "transcription", "text": "", "final": True, "error": str(e)}
-            )
-        except Exception:
-            return False
-        return True
-
-    finally:
-        sess.clear()
-
-
-async def _handle_text_message(ws, sess, data):
-    """Dispatch a JSON control message. Returns False to end the session."""
-    typ = data.get("type", "")
-
-    if typ == "start":
-        sess.clear()
-        sess.is_speaking = True
-        sess.speech_start = time.time()
-        await ws.send_json({"type": "started"})
-
-    elif typ == "end":
-        return await _finish_session(ws, sess, data)
-
-    elif typ == "cancel":
-        sess.clear()
-        await ws.send_json({"type": "cancelled"})
-
-    elif typ == "ping":
-        await ws.send_json({"type": "pong"})
-
-    return True
-
-
-@app.websocket("/ws/stt")
-async def websocket_stt(ws: WebSocket):
-    """WebSocket for streaming STT."""
-    await ws.accept()
-    sid = str(id(ws))
-    sess = StreamingSession()
-    streaming_sessions[sid] = sess
-
-    logger.info(f"streaming STT session started: {sid}")
-
-    try:
-        while True:
-            msg = await ws.receive()
-
-            if msg["type"] == "websocket.disconnect":
-                break
-
-            if msg["type"] != "websocket.receive":
-                continue
-
-            if "bytes" in msg:
-                await _handle_audio_chunk(ws, sess, msg["bytes"])
-
-            elif "text" in msg:
-                try:
-                    data = json.loads(msg["text"])
-                except Exception:
-                    continue
-
-                if not await _handle_text_message(ws, sess, data):
-                    break
-
-    except (WebSocketDisconnect, RuntimeError):
-        logger.info(f"streaming STT session disconnected: {sid}")
-
-    except Exception as e:
-        logger.exception(f"streaming STT error: {e}")
-
-    finally:
-        streaming_sessions.pop(sid, None)
-
-
-async def broadcast_vad_event(event, data=None):
-    """Broadcast VAD event to all clients."""
-    msg = {"event": event, **(data or {})}
-
-    for ws in active_vad_conns:
-        with contextlib.suppress(Exception):
-            await ws.send_json(msg)
-
-
-public_dir = resolve_path("src/public", SERVICE_ROOT)
-if os.path.isdir(public_dir):
-    app.mount("/", StaticFiles(directory=public_dir, html=True), name="ui")
 
 
 if __name__ == "__main__":
