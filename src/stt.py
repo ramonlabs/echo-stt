@@ -1,4 +1,4 @@
-# todo: whisperx here for multi-speaker when friends talk to it
+# TODO: whisperx here for multi-speaker when friends talk to it
 import os
 import tempfile
 
@@ -91,7 +91,7 @@ class FasterWhisperSTT:
             for s in segs:
                 seg = {"start": s.start, "end": s.end, "text": s.text}
 
-                # todo: tag words with speaker when friends join the stream
+                # TODO: tag words with speaker when friends join the stream
                 if word_timestamps and s.words:
                     seg["words"] = [
                         {
