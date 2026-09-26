@@ -1,21 +1,12 @@
 import collections
 import time
 
-import numpy as np
-
 try:
     import webrtcvad
 
     HAS_WEBRTCVAD = True
 except ImportError:
     HAS_WEBRTCVAD = False
-
-try:
-    import pyaudio
-
-    HAS_PYAUDIO = True
-except ImportError:
-    HAS_PYAUDIO = False
 
 # Audio constants
 SAMPLE_RATE_16K = 16000
@@ -165,134 +156,3 @@ class VoiceActivityDetector:
     def time_since_state_change(self):
         """Get seconds since last state change."""
         return time.time() - self.last_state_change
-
-
-class MicrophoneVAD:
-    """Real-time microphone VAD monitor."""
-
-    def __init__(self, cfg=None):
-        if not HAS_PYAUDIO:
-            raise ImportError("pyaudio not installed")
-
-        self.cfg = cfg or VADConfig()
-        self.vad = VoiceActivityDetector(cfg)
-
-        self.pa = pyaudio.PyAudio()
-        self.stream = None
-        self.running = False
-
-        self.on_speech_start = None
-        self.on_speech_end = None
-        self.on_interrupt = None
-
-    def start(self):
-        """Start monitoring microphone."""
-        if self.running:
-            return
-
-        self.vad.on_speech_start = self._handle_speech_start
-        self.vad.on_speech_end = self._handle_speech_end
-
-        self.stream = self.pa.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=self.cfg.sample_rate,
-            input=True,
-            frames_per_buffer=self.vad.frame_size,
-            stream_callback=self._audio_callback,
-        )
-
-        self.running = True
-        self.stream.start_stream()
-
-    def stop(self):
-        """Stop monitoring microphone."""
-        if not self.running:
-            return
-
-        self.running = False
-
-        if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-
-    def close(self):
-        """Clean up resources."""
-        self.stop()
-        self.pa.terminate()
-
-    def _audio_callback(self, in_data, frame_count, time_info, status):
-        """PyAudio callback."""
-        if self.running and in_data:
-            self.vad.process_frame(in_data)
-        return (in_data, pyaudio.paContinue)
-
-    def _handle_speech_start(self):
-        """Handle speech start."""
-        if self.on_speech_start:
-            self.on_speech_start()
-        if self.on_interrupt:
-            self.on_interrupt()
-
-    def _handle_speech_end(self, audio):
-        """Handle speech end."""
-        if self.on_speech_end:
-            self.on_speech_end(audio)
-
-    def is_speaking(self):
-        """Check if speaking."""
-        return self.vad.is_speaking()
-
-
-def audio_energy(audio):
-    """Calculate audio energy level (0.0 to 1.0)."""
-    if len(audio) < BYTES_PER_SAMPLE:
-        return 0.0
-
-    samples = np.frombuffer(audio, dtype=np.int16)
-    rms = np.sqrt(np.mean(samples.astype(np.float32) ** 2))
-
-    return min(1.0, rms / MAX_INT16)
-
-
-def detect_speech_energy(
-    audio, threshold=0.02, sample_rate=SAMPLE_RATE_16K, frame_ms=DEFAULT_FRAME_MS
-):
-    """Energy-based speech detection."""
-    frame_size = int(sample_rate * frame_ms / 1000) * BYTES_PER_SAMPLE
-    segments = []
-    in_speech = False
-    speech_start = 0
-
-    for i in range(0, len(audio) - frame_size + 1, frame_size):
-        frame = audio[i : i + frame_size]
-        energy = audio_energy(frame)
-        time_ms = (i // BYTES_PER_SAMPLE) * 1000 // sample_rate
-
-        if energy > threshold:
-            if not in_speech:
-                in_speech = True
-                speech_start = time_ms
-        else:
-            if in_speech:
-                in_speech = False
-                segments.append(
-                    {
-                        "start": speech_start,
-                        "end": time_ms,
-                        "duration": time_ms - speech_start,
-                    }
-                )
-
-    if in_speech:
-        end_time = (len(audio) // BYTES_PER_SAMPLE) * 1000 // sample_rate
-        segments.append(
-            {
-                "start": speech_start,
-                "end": end_time,
-                "duration": end_time - speech_start,
-            }
-        )
-
-    return segments

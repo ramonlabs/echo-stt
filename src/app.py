@@ -67,7 +67,6 @@ class VADAnalyzeResp(BaseModel):
 class VADStatusResp(BaseModel):
     available: bool
     webrtcvad_installed: bool
-    pyaudio_installed: bool
 
 
 def load_cfg(p):
@@ -211,7 +210,6 @@ async def vad_status():
     return VADStatusResp(
         available=vad.HAS_WEBRTCVAD,
         webrtcvad_installed=vad.HAS_WEBRTCVAD,
-        pyaudio_installed=vad.HAS_PYAUDIO,
     )
 
 
