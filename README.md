@@ -1,6 +1,6 @@
 # STT
 
-A FastAPI-based service for real-time speech-to-text using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and WebRTC VAD.
+A FastAPI-based service for real-time speech-to-text using [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
 
 
 
@@ -47,7 +47,3 @@ with open("audio.wav", "rb") as f:
 | --------- | -------------- | ------------------------------------------------------------------------- |
 | GET       | `/health`      | Check service health and loaded model                                     |
 | POST      | `/transcribe`  | Transcribe audio, with optional segments, word timestamps, or translation |
-| POST      | `/vad/analyze` | Analyze uploaded audio for voice activity                                 |
-| GET       | `/vad/status`  | Check VAD availability                                                    |
-| WebSocket | `/ws/vad`      | Real-time voice activity detection                                        |
-| WebSocket | `/ws/stt`      | Streaming speech-to-text                                                  |
