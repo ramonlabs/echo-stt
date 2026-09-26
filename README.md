@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/83c49dcb-e263-43f4-96fc-1430650a5689
 
 ```bash
 # Install system requirements
-sudo apt install portaudio19-dev libcublas-12-9 libcudnn9-cuda-12
+sudo apt install libcublas-12-9 libcudnn9-cuda-12
 
 # Install python dependencies
 python3 src/setup.py
